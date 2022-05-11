@@ -16,8 +16,8 @@ global question
 question = ""
 
 def initDB():
-  global cache 
-  cache = sqlite3.connect(home + "/.cbot_cache") 
+  global cache
+  cache = sqlite3.connect(f"{home}/.cbot_cache")
   cache.execute("""
                    CREATE TABLE IF NOT EXISTS questions 
                    (id INTEGER PRIMARY KEY,
@@ -29,30 +29,29 @@ def closeDB():
     cache.close()
 
 def checkQ(question_text):
-    sql = "SELECT id,answer,count FROM questions WHERE question =" + question_text
-    answer = cache.execute("SELECT id,answer,count FROM questions WHERE question = ?", (question_text,))
-    answer = answer.fetchone()
-    if (answer):
-        response = answer[1]
-        newcount = int(answer[2]) + 1
-        counter = cache.execute(" UPDATE questions SET count = ? WHERE id = ?", (newcount,answer[0]))
-        return(response)
-    else:
-        return(False)
+  sql = f"SELECT id,answer,count FROM questions WHERE question ={question_text}"
+  answer = cache.execute("SELECT id,answer,count FROM questions WHERE question = ?", (question_text,))
+  if answer := answer.fetchone():
+    response = answer[1]
+    newcount = int(answer[2]) + 1
+    counter = cache.execute(" UPDATE questions SET count = ? WHERE id = ?", (newcount,answer[0]))
+    return(response)
+  else:
+    return(False)
 
 def insertQ(question_text,answer_text):
     answer = cache.execute("DELETE FROM questions WHERE question = ?",(question_text,))
     answer = cache.execute("INSERT INTO questions (question,answer) VALUES (?,?)", (question_text,answer_text))
 
 def fetchQ():
-    question = ""
+  question = ""
     # [cbot,-x,  What,is,the,date]  # execute the response
     # [cbot,What,is, the,date]      # no quotes will work
     # [cbot,What is the date]       # with quotes will work
-    for a in range(1,len(sys.argv)):
-        question = question + " " + sys.argv[a]
-    question = question.strip()
-    return question
+  for a in range(1,len(sys.argv)):
+    question = f"{question} {sys.argv[a]}"
+  question = question.strip()
+  return question
 
 def parseOptions(question):
     global question_mode    # modes are normal, shortcut and general
@@ -126,9 +125,9 @@ if (question_mode == "shortcut"):
 else:
     cache_answer = checkQ(question)   
 
-if not(cache_answer) and ((question_mode == "general") or (question_mode == "normal")):
-    prompt="I am a command line translation tool for "+ platform +"."
-    prompt = prompt + """
+if not (cache_answer) and question_mode in ["general", "normal"]:
+  prompt = f"I am a command line translation tool for {platform}."
+  prompt = prompt + """
 Ask me what you want to do and I will tell you how to do it in a unix command.
 Q: How do I copy a file
 cp filename.txt destination_filename.txt
@@ -143,42 +142,41 @@ cd ~/Desktop/
 Q: How do I shutdown the computer?
 sudo shutdown -h now
 """
-    if (question_mode == "general"):     #Alternate prompt for general Q's 
-        prompt="Q: Who is Batman?\nBatman is a fictional comic book character.\nQ: What is torsalplexity?\nUnknown\nQ: What is Devz9?\nUnknown\nQ: What is the capital of California?\nSacramento.\nQ: How do you add a comment to a shell script?\nTo add a comment make sure the line starts with a #\nQ: How do I go to the first line using vim\nThe command gg or :1 will go to the first line\nQ: What is Kozar-09?\nUnknown\nQ: What keyboard shortcut cycles tabs in chrome?\nControl+Tab will cycle to the next tab and Shift+Control+Tab will cycle to the previous tab\n"
-    temp_question = question
-    if not("?" in question):
-        temp_question = question + "?"  # GPT produces better results 
-                                        # if there's a question mark.
-                                        # using a temp variable so the ? doesn't get cached
-    prompt = prompt + "Q: " + temp_question + "\n" 
-    response = openai.Completion.create(
-            engine="davinci",
-            prompt=prompt,
-            temperature=0,
-            max_tokens=100,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0,
-            stop=["\n"]
-            )
-    jsonToPython = json.loads(response.last_response.body)
-    result = jsonToPython['choices'][0]['text']
-    insertQ(question, result) 
+  if (question_mode == "general"):     #Alternate prompt for general Q's 
+      prompt="Q: Who is Batman?\nBatman is a fictional comic book character.\nQ: What is torsalplexity?\nUnknown\nQ: What is Devz9?\nUnknown\nQ: What is the capital of California?\nSacramento.\nQ: How do you add a comment to a shell script?\nTo add a comment make sure the line starts with a #\nQ: How do I go to the first line using vim\nThe command gg or :1 will go to the first line\nQ: What is Kozar-09?\nUnknown\nQ: What keyboard shortcut cycles tabs in chrome?\nControl+Tab will cycle to the next tab and Shift+Control+Tab will cycle to the previous tab\n"
+  temp_question = question
+  if "?" not in question:
+    temp_question = f"{question}?"
+                                          # if there's a question mark.
+                                          # using a temp variable so the ? doesn't get cached
+  prompt = f"{prompt}Q: {temp_question}" + "\n"
+  response = openai.Completion.create(
+          engine="davinci",
+          prompt=prompt,
+          temperature=0,
+          max_tokens=100,
+          top_p=1,
+          frequency_penalty=0,
+          presence_penalty=0,
+          stop=["\n"]
+          )
+  jsonToPython = json.loads(response.last_response.body)
+  result = jsonToPython['choices'][0]['text']
+  insertQ(question, result)
 else:
-    result = cache_answer 
-    if not(question_mode == "shortcut"):
-        print("💾 Cache Hit")
+  result = cache_answer
+  if question_mode != "shortcut":
+    print("💾 Cache Hit")
 
 if clip:
     pyperclip.copy(result)
 if execute:
-    print("cbot executing: " + result) 
-    if ("sudo" in result):
-        print("Execution canceled, cbot will not execute sudo commands.")
-    else:
-        result = os.system(result)
-else:
-    if not(question_mode == "shortcut"):
-        print(result)
+  print(f"cbot executing: {result}")
+  if ("sudo" in result):
+      print("Execution canceled, cbot will not execute sudo commands.")
+  else:
+      result = os.system(result)
+elif question_mode != "shortcut":
+  print(result)
 
 closeDB()
